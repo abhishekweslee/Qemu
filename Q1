@@ -1,0 +1,61 @@
+import subprocess
+import os
+import time
+
+def run_qemu():
+    # Define the path to the drive image
+    drive_image_path = os.path.expanduser("~/Build/usb/dqib_riscv64-virt/image.qcow2")  # Expand ~ to full path
+
+    # Define the QEMU command as a list of arguments
+    qemu_command = [
+        "qemu-system-riscv64",
+        "-machine", "virt",
+        "-cpu", "rv64",
+        "-m", "2G",
+        "-device", "virtio-net-device,netdev=net",
+        "-netdev", "user,id=net,hostfwd=tcp::2222-:22",
+        "-device", "virtio-blk-pci,drive=hd",
+        "-drive", f"file={drive_image_path},if=none,id=hd",
+        "-bios", "/usr/lib/riscv64-linux-gnu/opensbi/generic/fw_jump.elf",
+        "-kernel", "/usr/lib/u-boot/qemu-riscv64_smode/uboot.elf",
+        "-nographic",
+        "-serial", "mon:stdio"  # Redirect QEMU monitor and serial output to stdio
+    ]
+
+    # Use subprocess to run the command
+    try:
+        # Start QEMU using Popen to allow real-time interaction
+        process = subprocess.Popen(qemu_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True)
+
+        # Loop to read output line by line
+        while True:
+            output = process.stdout.readline()
+            if output:
+                print(output, end='')  # Print the output line without additional newline
+
+                # Check for the U-Boot prompt to send the input
+                if "Enter choice:" in output:
+                    process.stdin.write("1\n")  # Send '1' to select the first option
+                    process.stdin.flush()
+
+            # Break if the process is finished
+            if process.poll() is not None:
+                break
+
+        # Capture any remaining output
+        remaining_output, errors = process.communicate()
+        print(remaining_output, end='')
+        if errors:
+            print(errors)
+
+    except subprocess.CalledProcessError as e:
+        print(f"An error occurred: {e}")
+    except FileNotFoundError:
+        print("QEMU is not installed or not found in PATH.")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+
+
+if __name__ == "__main__":
+    run_qemu()
